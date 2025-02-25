@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Improved Sand Simulation</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      background: #000;
+    }
+    /* コントロールUI（ブラシサイズスライダーと説明文）のスタイル */
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      z-index: 10;
+      font-family: sans-serif;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px;
+      border-radius: 4px;
+    }
+    #controls label, #controls p {
+      margin: 0;
+      font-size: 14px;
+    }
+    #brushSizeSlider {
+      width: 100px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>Brush Size: <span id="brushSizeDisplay">4</span></label>
+    <br>
+    <input type="range" id="brushSizeSlider" min="1" max="10" value="4">
+    <p>Click or touch and drag to add sand.</p>
+  </div>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    // 定数定義
+    const CELL_SIZE = 4;   // セルサイズ（ピクセル）
+    const SAND = 1;        // 砂のセルを表す値
+
+    // Canvasの初期設定
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    let cols = Math.floor(canvas.width / CELL_SIZE);
+    let rows = Math.floor(canvas.height / CELL_SIZE);
+    
+    // グリッド初期化：2次元配列でセルの状態を管理（0: 空, 1: 砂）
+    let grid = [];
+    for (let x = 0; x < cols; x++) {
+      grid[x] = [];
+      for (let y = 0; y < rows; y++) {
+        grid[x][y] = 0;
+      }
+    }
+    
+    // マウス・タッチ操作用変数
+    let mouseDown = false;
+    let mouseX = 0;
+    let mouseY = 0;
+    let brushSize = 4;
+    
+    // ブラシサイズコントロール
+    const brushSizeSlider = document.getElementById('brushSizeSlider');
+    const brushSizeDisplay = document.getElementById('brushSizeDisplay');
+    brushSizeSlider.addEventListener('input', (e) => {
+      brushSize = parseInt(e.target.value);
+      brushSizeDisplay.textContent = brushSize;
+    });
+    
+    // マウスイベントリスナー
+    canvas.addEventListener('mousedown', (e) => {
+      mouseDown = true;
+      updateMousePosition(e);
+      addSand(mouseX, mouseY);
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      updateMousePosition(e);
+      if (mouseDown) {
+        addSand(mouseX, mouseY);
+      }
+    });
+    canvas.addEventListener('mouseup', () => mouseDown = false);
+    canvas.addEventListener('mouseleave', () => mouseDown = false);
+    
+    // タッチイベントリスナー（モバイル対応）
+    canvas.addEventListener('touchstart', (e) => {
+      mouseDown = true;
+      e.preventDefault();
+      updateMousePosition(e.touches[0]);
+      addSand(mouseX, mouseY);
+    });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      updateMousePosition(e.touches[0]);
+      if (mouseDown) {
+        addSand(mouseX, mouseY);
+      }
+    });
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      mouseDown = false;
+    });
+    
+    // マウス/タッチ位置をセル座標に変換する関数
+    function updateMousePosition(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      mouseX = Math.floor(x / CELL_SIZE);
+      mouseY = Math.floor(y / CELL_SIZE);
+    }
+    
+    // 指定位置付近に砂を追加する関数（円形ブラシ）
+    function addSand(cx, cy) {
+      for (let i = -brushSize; i <= brushSize; i++) {
+        for (let j = -brushSize; j <= brushSize; j++) {
+          const x = cx + i;
+          const y = cy + j;
+          if (x >= 0 && x < cols && y >= 0 && y < rows && (i*i + j*j < brushSize*brushSize)) {
+            grid[x][y] = SAND;
+          }
+        }
+      }
+    }
+    
+    // シミュレーションの更新（各セルの移動処理）
+    function update() {
+      // 下から上へループ（下のセルが更新済みにならないように）
+      for (let y = rows - 2; y >= 0; y--) {
+        for (let x = 0; x < cols; x++) {
+          if (grid[x][y] === SAND) {
+            // 直接下が空なら落下
+            if (grid[x][y+1] === 0) {
+              grid[x][y+1] = SAND;
+              grid[x][y] = 0;
+            } else {
+              // 左下、右下の両方が空ならランダムに移動
+              const canLeft = (x > 0 && grid[x-1][y+1] === 0);
+              const canRight = (x < cols - 1 && grid[x+1][y+1] === 0);
+              if (canLeft && canRight) {
+                if (Math.random() < 0.5) {
+                  grid[x-1][y+1] = SAND;
+                  grid[x][y] = 0;
+                } else {
+                  grid[x+1][y+1] = SAND;
+                  grid[x][y] = 0;
+                }
+              } else if (canLeft) {
+                grid[x-1][y+1] = SAND;
+                grid[x][y] = 0;
+              } else if (canRight) {
+                grid[x+1][y+1] = SAND;
+                grid[x][y] = 0;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // 描画処理
+    function draw() {
+      // 画面を黒でクリア
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // 砂セルを描画
+      ctx.fillStyle = '#E4C16F';
+      for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+          if (grid[x][y] === SAND) {
+            ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+          }
+        }
+      }
+    }
+    
+    // メインループ
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+    
+    // ウィンドウサイズ変更時の処理（グリッドの再生成）
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const newCols = Math.floor(canvas.width / CELL_SIZE);
+      const newRows = Math.floor(canvas.height / CELL_SIZE);
+      let newGrid = [];
+      for (let x = 0; x < newCols; x++) {
+        newGrid[x] = [];
+        for (let y = 0; y < newRows; y++) {
+          if (x < cols && y < rows) {
+            newGrid[x][y] = grid[x][y];
+          } else {
+            newGrid[x][y] = 0;
+          }
+        }
+      }
+      cols = newCols;
+      rows = newRows;
+      grid = newGrid;
+    });
+  </script>
+</body>
+</html>
